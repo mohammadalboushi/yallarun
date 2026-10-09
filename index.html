@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Yalla Run</title>
+  
+  <!-- PWA & Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#D9480F">
+  <link rel="apple-touch-icon" href="icon-512.png">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDK (Compat Version for Vanilla JS) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --ink: #0F172A;
+      --muted: #64748B;
+      --line: #E2E8F0;
+      --primary: #D9480F;
+      --primary-hover: #C9420D;
+      --primary-soft: #FDE9DF;
+      --danger: #EF4444;
+      --danger-soft: #FEE2E2;
+      --warn: #D97706;
+      --warn-bg: #FEF3C7;
+      --radius: 16px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      --font: 'Tajawal', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+    button { font-family: var(--font); cursor: pointer; border: none; outline: none; }
+    input, select { font-family: var(--font); }
+    a { text-decoration: none; color: var(--primary); }
+
+    /* Layout */
+    .app-container { max-width: 800px; margin: 0 auto; padding: 20px 16px 80px; }
+    .hidden { display: none !important; }
+
+    /* Header */
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+    .logo { font-size: 28px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+    .logo-badge { font-size: 12px; background: var(--primary-soft); color: var(--primary); padding: 4px 10px; border-radius: 20px; font-weight: 700; }
+    .admin-link { font-size: 14px; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 8px 16px; border-radius: 20px; transition: 0.2s; }
+    .admin-link:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* Search */
+    .search-box { position: sticky; top: 10px; z-index: 10; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--line); padding: 4px; display: flex; margin-bottom: 24px; transition: 0.3s; }
+    .search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+    .search-box input { width: 100%; border: none; padding: 14px 16px; font-size: 16px; font-weight: 500; border-radius: var(--radius); background: transparent; }
+    .search-box input:focus { outline: none; }
+
+    /* Regions Grid */
+    .section-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+    .section-header { padding: 16px 20px; background: #F8FAFC; border-bottom: 1px solid var(--line); font-size: 18px; font-weight: 800; color: var(--ink); }
+    .tier-row { padding: 16px 20px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 100px 1fr; gap: 16px; align-items: start; }
+    .tier-row:last-child { border-bottom: none; }
+    .price-tag { font-size: 22px; font-weight: 800; color: var(--primary); display: flex; flex-direction: column; line-height: 1.2; }
+    .price-tag small { font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 4px; }
+    .areas-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .area-chip { background: var(--bg); border: 1px solid var(--line); padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--ink); }
+    .area-chip.late-stop { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+
+    /* Admin Views */
+    .admin-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); padding: 32px 24px; box-shadow: var(--shadow); margin-top: 40px; text-align: center; }
+    .admin-card h2 { margin-bottom: 24px; font-weight: 800; }
+    .form-group { margin-bottom: 16px; text-align: right; }
+    .form-group label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--muted); }
+    .form-group input, .form-group select { width: 100%; padding: 12px 16px; border: 2px solid var(--line); border-radius: 12px; font-size: 15px; transition: 0.2s; }
+    .form-group input:focus, .form-group select:focus { border-color: var(--primary); outline: none; }
+    .form-note { font-size: 12px; color: var(--warn); margin-top: 6px; font-weight: 600; }
+    
+    .btn { display: inline-flex; justify-content: center; align-items: center; width: 100%; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 700; transition: 0.2s; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-outline { background: transparent; border: 2px solid var(--line); color: var(--ink); }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); }
+
+    .loader { border: 3px solid var(--line); border-top-color: var(--primary); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Admin Dashboard */
+    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px; }
+    .tab { padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+    .tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    .data-table-wrapper { overflow-x: auto; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .data-table { width: 100%; border-collapse: collapse; text-align: right; }
+    .data-table th, .data-table td { padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .data-table th { background: #F8FAFC; font-weight: 800; color: var(--muted); }
+    .data-table tr:hover { background: #F8FAFC; }
+    .data-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); }
+
+    .action-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: white; padding: 16px 24px; border-radius: 16px; display: flex; gap: 16px; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 100; width: 90%; max-width: 400px; justify-content: space-between; }
+    
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+    .modal { background: var(--surface); width: 100%; max-width: 400px; border-radius: var(--radius); padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+    .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+    .modal-actions .btn { flex: 1; }
+
+    .msg { padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; margin-bottom: 16px; text-align: center; }
+    .msg.error { background: var(--danger-soft); color: var(--danger); }
+    .msg.success { background: #DCFCE7; color: #166534; }
+  </style>
+</head>
+<body>
+
+  <!-- Main View -->
+  <div id="view-main" class="app-container">
+    <header>
+      <div class="logo">Yalla Run <span class="logo-badge">توصيل 24/7</span></div>
+      <a href="#admin" class="admin-link">الإدارة</a>
+    </header>
+    
+    <div class="search-box">
+      <input type="search" id="searchInput" placeholder="ابحث عن منطقة، مثلاً: بيروت، جونيه..." autocomplete="off">
+    </div>
+
+    <div id="loading-main" style="text-align: center; padding: 40px;"><div class="loader"></div></div>
+    <div id="regions-container"></div>
+  </div>
+
+  <!-- Auth View -->
+  <div id="view-auth" class="app-container hidden">
+    <header>
+      <div class="logo">Yalla Run <span class="logo-badge">Admin</span></div>
+      <a href="#" class="admin-link">العودة للرئيسية</a>
+    </header>
+    <div class="admin-card">
+      <h2>تسجيل الدخول للإدارة</h2>
+      <div id="auth-msg" class="msg hidden"></div>
+      <form id="login-form">
+        <div class="form-group">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="auth-email" required dir="ltr">
+        </div>
+        <div class="form-group">
+          <label>كلمة المرور</label>
+          <input type="password" id="auth-password" required dir="ltr">
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-login">دخول</button>
+      </form>
+      <div style="margin-top: 16px; display: flex; justify-content: space-between; font-size: 14px;">
+        <a href="#" id="link-register">إنشاء حساب جديد</a>
+        <a href="#" id="link-reset">نسيت كلمة المرور؟</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard View -->
+  <div id="view-admin" class="app-container hidden">
+    <header>
+      <div class="logo">Yalla Run <span class="logo-badge">لوحة التحكم</span></div>
+      <button id="btn-logout" class="admin-link" style="color: var(--danger); border-color: var(--danger-soft);">تسجيل خروج</button>
+    </header>
+    
+    <div class="dashboard-header">
+      <h2 style="font-weight: 800;">إدارة المناطق والأسعار</h2>
+      <button class="btn btn-primary" style="width: auto; padding: 10px 20px;" onclick="openModal()">+ إضافة منطقة</button>
+    </div>
+
+    <div class="data-table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th width="40"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th>المنطقة</th>
+            <th>السعر</th>
+            <th>التبويب (القسم)</th>
+            <th>تعديل</th>
+          </tr>
+        </thead>
+        <tbody id="admin-table-body">
+          <!-- Rows -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Bulk Action Bar -->
+    <div id="action-bar" class="action-bar hidden">
+      <span style="font-weight: 700;">تم تحديد <span id="selected-count">0</span> منطقة</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" style="background: transparent; color: white; padding: 8px; width: auto;" onclick="clearSelection()">إلغاء</button>
+        <button class="btn btn-danger" style="padding: 8px 16px; width: auto;" onclick="deleteSelected()">حذف</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Add/Edit -->
+  <div id="modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="modal-title" style="margin-bottom: 20px; font-weight: 800;">إضافة منطقة</h2>
+      <div id="modal-msg" class="msg hidden"></div>
+      <form id="area-form">
+        <input type="hidden" id="area-id">
+        <div class="form-group">
+          <label>اسم المنطقة</label>
+          <input type="text" id="area-name" required>
+        </div>
+        <div class="form-group">
+          <label>السعر (بالآلاف)</label>
+          <input type="number" id="area-price" required min="0">
+          <div class="form-note">ملاحظة: السعر يُدخل بالآلاف. مثال: إدخال 150 سيعرض للمستخدم 150,000 ل.ل</div>
+        </div>
+        <div class="form-group">
+          <label>القسم / التبويب</label>
+          <select id="area-section" required>
+            <option value="beirut">بيروت</option>
+            <option value="dahiye">الضاحية الجنوبية</option>
+            <option value="hazmieh">الحازمية - بعبدا</option>
+            <option value="metn">المتن</option>
+            <option value="sahel">ساحل المتن</option>
+            <option value="jabal">جبل لبنان</option>
+            <option value="khalde">خلدة</option>
+            <option value="hadath">حدث</option>
+            <option value="emb">السفارات</option>
+          </select>
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="area-late" style="width: auto;">
+          <label style="margin: 0;">إيقاف التوصيل بعد الـ 7 مساءً</label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-area">حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. Firebase Config & Init ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBB_U4C880PW4GxZd8FALv8yBSiP2mNeBY",
+      authDomain: "malaboushi.firebaseapp.com",
+      databaseURL: "https://malaboushi-default-rtdb.firebaseio.com/",
+      projectId: "malaboushi",
+      storageBucket: "malaboushi.firebasestorage.app",
+      messagingSenderId: "110336819350",
+      appId: "1:110336819350:web:2b1b0488e72b811f0602b7"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    // Sections Definition
+    const SECTIONS = {
+      beirut: "بيروت", dahiye: "الضاحية الجنوبية", hazmieh: "الحازمية - بعبدا",
+      metn: "المتن", sahel: "ساحل المتن", jabal: "جبل لبنان",
+      khalde: "خلدة", hadath: "حدث", emb: "السفارات"
+    };
+
+    // State
+    let areasData = {};
+    let isEditing = false;
+    let selectedIds = new Set();
+    let currentAuthMode = 'login'; // login, register, reset
+
+    // --- 2. Format Price Helper ---
+    function formatPrice(p) {
+      if (!p) return '0 ل.ل';
+      // 150 -> 150,000 ل.ل
+      return (Number(p) * 1000).toLocaleString('en-US') + ' ل.ل';
+    }
+
+    // --- 3. View Router ---
+    function handleRoute() {
+      const hash = window.location.hash;
+      document.getElementById('view-main').classList.add('hidden');
+      document.getElementById('view-auth').classList.add('hidden');
+      document.getElementById('view-admin').classList.add('hidden');
+
+      if (hash === '#admin') {
+        if (auth.currentUser) {
+          document.getElementById('view-admin').classList.remove('hidden');
+        } else {
+          document.getElementById('view-auth').classList.remove('hidden');
+        }
+      } else {
+        document.getElementById('view-main').classList.remove('hidden');
+      }
+    }
+    window.addEventListener('hashchange', handleRoute);
+
+    // --- 4. Main App Rendering ---
+    const regionsContainer = document.getElementById('regions-container');
+    const searchInput = document.getElementById('searchInput');
+
+    function renderMainView() {
+      regionsContainer.innerHTML = '';
+      if(Object.keys(areasData).length === 0) return;
+
+      // Group areas by section, then by price
+      let grouped = {};
+      Object.keys(SECTIONS).forEach(sec => grouped[sec] = {});
+
+      const filterText = searchInput.value.trim().toLowerCase();
+
+      for (let id in areasData) {
+        const item = areasData[id];
+        if (filterText && !item.name.toLowerCase().includes(filterText)) continue;
+        
+        if (!grouped[item.section]) grouped[item.section] = {};
+        if (!grouped[item.section][item.price]) grouped[item.section][item.price] = [];
+        grouped[item.section][item.price].push(item);
+      }
+
+      Object.keys(grouped).forEach(secKey => {
+        const tiers = grouped[secKey];
+        if (Object.keys(tiers).length === 0) return;
+
+        let html = `<div class="section-card"><div class="section-header">${SECTIONS[secKey]}</div>`;
+        
+        // Sort prices
+        const sortedPrices = Object.keys(tiers).sort((a,b) => Number(a) - Number(b));
+        
+        sortedPrices.forEach(price => {
+          const areasHtml = tiers[price].map(area => `
+            <span class="area-chip ${area.lateStop ? 'late-stop' : ''}">
+              ${area.name} ${area.lateStop ? '<span style="font-size:10px; margin-right:4px;">(يتوقف 7م)</span>' : ''}
+            </span>
+          `).join('');
+
+          html += `
+            <div class="tier-row">
+              <div class="price-tag">${formatPrice(price)}</div>
+              <div class="areas-list">${areasHtml}</div>
+            </div>`;
+        });
+        html += `</div>`;
+        regionsContainer.insertAdjacentHTML('beforeend', html);
+      });
+      document.getElementById('loading-main').classList.add('hidden');
+    }
+
+    searchInput.addEventListener('input', renderMainView);
+
+    // --- 5. Firebase Data Listener ---
+    db.ref('deliveryAreas').on('value', snap => {
+      if(snap.exists()){
+        areasData = snap.val();
+        renderMainView();
+        if(window.location.hash === '#admin' && auth.currentUser) renderAdminTable();
+      } else {
+        document.getElementById('loading-main').innerHTML = "لا توجد بيانات حالياً.";
+        areasData = {};
+      }
+    });
+
+    // --- 6. Admin Panel Functions ---
+    function renderAdminTable() {
+      const tbody = document.getElementById('admin-table-body');
+      tbody.innerHTML = '';
+      for (let id in areasData) {
+        const item = areasData[id];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input type="checkbox" class="row-check" value="${id}" onchange="updateSelection(this)" ${selectedIds.has(id)?'checked':''}></td>
+          <td style="font-weight:700;">${item.name} ${item.lateStop ? '<span style="color:var(--warn); font-size:11px;">(يتوقف 7م)</span>' : ''}</td>
+          <td style="color:var(--primary); font-weight:700;">${formatPrice(item.price)}</td>
+          <td>${SECTIONS[item.section] || item.section}</td>
+          <td><button class="btn btn-outline" style="padding:6px 12px;" onclick="editArea('${id}')">تعديل</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      updateActionBar();
+    }
+
+    // Modal Operations
+    function openModal() {
+      document.getElementById('modal').classList.remove('hidden');
+      document.getElementById('modal-msg').classList.add('hidden');
+      if(!isEditing) {
+        document.getElementById('modal-title').textContent = 'إضافة منطقة جديدة';
+        document.getElementById('area-form').reset();
+        document.getElementById('area-id').value = '';
+      } else {
+        document.getElementById('modal-title').textContent = 'تعديل المنطقة';
+      }
+    }
+    function closeModal() {
+      document.getElementById('modal').classList.add('hidden');
+      isEditing = false;
+    }
+
+    document.getElementById('area-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-save-area');
+      const msg = document.getElementById('modal-msg');
+      btn.disabled = true;
+      btn.textContent = 'جاري الحفظ...';
+
+      const id = document.getElementById('area-id').value || db.ref().child('deliveryAreas').push().key;
+      const data = {
+        name: document.getElementById('area-name').value.trim(),
+        price: Number(document.getElementById('area-price').value),
+        section: document.getElementById('area-section').value,
+        lateStop: document.getElementById('area-late').checked
+      };
+
+      try {
+        await db.ref(`deliveryAreas/${id}`).set(data);
+        closeModal();
+      } catch (err) {
+        msg.textContent = 'خطأ: ' + err.message;
+        msg.className = 'msg error';
+        msg.classList.remove('hidden');
+      }
+      btn.disabled = false;
+      btn.textContent = 'حفظ';
+    });
+
+    window.editArea = function(id) {
+      isEditing = true;
+      const item = areasData[id];
+      document.getElementById('area-id').value = id;
+      document.getElementById('area-name').value = item.name;
+      document.getElementById('area-price').value = item.price;
+      document.getElementById('area-section').value = item.section;
+      document.getElementById('area-late').checked = !!item.lateStop;
+      openModal();
+    }
+
+    // Bulk Deletion
+    window.toggleSelectAll = function(el) {
+      const checks = document.querySelectorAll('.row-check');
+      checks.forEach(c => { c.checked = el.checked; updateSelection(c, false); });
+      updateActionBar();
+    }
+    window.updateSelection = function(el, updateBar = true) {
+      if(el.checked) selectedIds.add(el.value);
+      else selectedIds.delete(el.value);
+      if(updateBar) updateActionBar();
+    }
+    function updateActionBar() {
+      const bar = document.getElementById('action-bar');
+      const count = document.getElementById('selected-count');
+      count.textContent = selectedIds.size;
+      if(selectedIds.size > 0) bar.classList.remove('hidden');
+      else bar.classList.add('hidden');
+    }
+    window.clearSelection = function() {
+      selectedIds.clear();
+      document.getElementById('selectAll').checked = false;
+      document.querySelectorAll('.row-check').forEach(c => c.checked = false);
+      updateActionBar();
+    }
+    window.deleteSelected = async function() {
+      if(!confirm(`هل أنت متأكد من حذف ${selectedIds.size} منطقة؟`)) return;
+      let updates = {};
+      selectedIds.forEach(id => updates[`deliveryAreas/${id}`] = null);
+      try {
+        await db.ref().update(updates);
+        clearSelection();
+        alert('تم الحذف بنجاح');
+      } catch (err) { alert('فشل الحذف: غير مصرح لك أو حدث خطأ.'); }
+    }
+
+    // --- 7. Authentication ---
+    auth.onAuthStateChanged(user => {
+      handleRoute();
+      if(user && window.location.hash === '#admin') renderAdminTable();
+    });
+
+    const loginForm = document.getElementById('login-form');
+    const authMsg = document.getElementById('auth-msg');
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('auth-email').value;
+      const pass = document.getElementById('auth-password').value;
+      const btn = document.getElementById('btn-login');
+      btn.disabled = true;
+      btn.textContent = 'الرجاء الانتظار...';
+      
+      try {
+        if (currentAuthMode === 'login') {
+          await auth.signInWithEmailAndPassword(email, pass);
+        } else if (currentAuthMode === 'register') {
+          await auth.createUserWithEmailAndPassword(email, pass);
+        } else {
+          await auth.sendPasswordResetEmail(email);
+          authMsg.textContent = 'تم إرسال رابط الاستعادة إلى بريدك.';
+          authMsg.className = 'msg success';
+          authMsg.classList.remove('hidden');
+          btn.disabled = false; btn.textContent = 'إرسال الرابط';
+          return;
+        }
+        authMsg.classList.add('hidden');
+      } catch(err) {
+        authMsg.textContent = 'خطأ: ' + err.message;
+        authMsg.className = 'msg error';
+        authMsg.classList.remove('hidden');
+      }
+      btn.disabled = false;
+      btn.textContent = currentAuthMode === 'login' ? 'دخول' : (currentAuthMode === 'register' ? 'إنشاء حساب' : 'إرسال الرابط');
+    });
+
+    document.getElementById('link-register').addEventListener('click', (e) => {
+      e.preventDefault();
+      currentAuthMode = currentAuthMode === 'login' ? 'register' : 'login';
+      document.getElementById('btn-login').textContent = currentAuthMode === 'login' ? 'دخول' : 'إنشاء حساب';
+      e.target.textContent = currentAuthMode === 'login' ? 'إنشاء حساب جديد' : 'العودة لتسجيل الدخول';
+      document.getElementById('auth-password').parentElement.classList.remove('hidden');
+      document.getElementById('auth-password').required = true;
+    });
+
+    document.getElementById('link-reset').addEventListener('click', (e) => {
+      e.preventDefault();
+      currentAuthMode = 'reset';
+      document.getElementById('btn-login').textContent = 'إرسال رابط الاستعادة';
+      document.getElementById('auth-password').parentElement.classList.add('hidden');
+      document.getElementById('auth-password').required = false;
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', () => auth.signOut());
+
+    // --- 8. Service Worker Registration ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed: ', err));
+      });
+    }
+
+    // Init Route
+    handleRoute();
+  </script>
+</body>
+</html>
