@@ -77,9 +77,9 @@
     /* Tier Row */
     .tier-row { padding: 16px 20px; border-bottom: 1px solid var(--line); }
     .tier-row:last-child { border-bottom: none; }
-    .tier-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+    .tier-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .price-value { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--primary); }
-    .price-unit { font-size: 13px; font-weight: 700; color: var(--muted); }
+    .price-usd { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: #059669; background: #ECFDF5; padding: 4px 12px; border-radius: 10px; border: 1px solid #A7F3D0; }
 
     /* Area Chips */
     .areas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
@@ -89,8 +89,8 @@
     .late-badge { font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; color: var(--warn); }
 
     /* Admin Styles */
-    .admin-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); padding: 32px 24px; box-shadow: var(--shadow); margin-top: 20px; text-align: center; }
-    .admin-card h2 { margin-bottom: 24px; font-weight: 800; font-family: var(--font-display); }
+    .admin-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); padding: 24px; box-shadow: var(--shadow); margin-bottom: 20px; }
+    .admin-card h2, .admin-card h3 { font-weight: 800; font-family: var(--font-display); }
     .form-group { margin-bottom: 16px; text-align: right; }
     .form-group label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--muted); }
     .form-group input, .form-group select { width: 100%; padding: 12px 16px; border: 1.5px solid var(--line); border-radius: 12px; font-size: 15px; transition: 0.2s; }
@@ -153,8 +153,8 @@
       <div class="logo">Yalla Run <span class="logo-badge">Admin</span></div>
       <a href="#" class="admin-link">العودة للرئيسية</a>
     </header>
-    <div class="admin-card">
-      <h2>تسجيل الدخول للإدارة</h2>
+    <div class="admin-card" style="text-align: center;">
+      <h2 style="margin-bottom: 24px;">تسجيل الدخول للإدارة</h2>
       <div id="auth-msg" class="msg hidden"></div>
       <form id="login-form">
         <div class="form-group">
@@ -177,6 +177,18 @@
       <button id="btn-logout" class="admin-link" style="color: var(--danger); border-color: var(--danger-soft);">تسجيل خروج</button>
     </header>
     
+    <!-- Exchange Rate Admin Card -->
+    <div class="admin-card">
+      <h3 style="margin-bottom: 12px;">إدارة سعر الصرف</h3>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <div class="form-group" style="margin: 0; flex: 1;">
+          <input type="number" id="exchange-rate-input" placeholder="سعر الصرف (مثال: 89500)" min="1">
+        </div>
+        <button class="btn btn-primary" style="width: auto; padding: 12px 24px; white-space: nowrap;" onclick="saveExchangeRate()">حفظ السعر</button>
+      </div>
+      <div id="rate-msg" class="msg hidden" style="margin-top: 10px;"></div>
+    </div>
+
     <div class="dashboard-header">
       <h2 style="font-weight: 800; font-family: var(--font-display);">إدارة المناطق والأسعار</h2>
       <button class="btn btn-primary" style="width: auto; padding: 10px 20px;" onclick="openModal()">+ إضافة منطقة</button>
@@ -252,6 +264,9 @@
   </div>
 
   <script>
+    // --- 0. CACHE VERSION (غير هاد الرقم لما تبديل التحديث ليمسح الكاش عند الجميع) ---
+    const CACHE_VERSION = 'v1.0.0';
+
     // --- 1. Firebase Config & Init ---
     const firebaseConfig = {
       apiKey: "AIzaSyBB_U4C880PW4GxZd8FALv8yBSiP2mNeBY",
@@ -275,13 +290,14 @@
 
     // State
     let areasData = {};
+    let exchangeRate = 89500; // Default Rate
     let isEditing = false;
     let selectedIds = new Set();
-    let isNestedPath = false; // To handle both direct & imported path structures safely
+    let isNestedPath = false;
 
     // Helper: Normalize Data Source Path
     function getNormalizedSource() {
-      if (areasData.deliveryAreas) {
+      if (areasData && areasData.deliveryAreas) {
         isNestedPath = true;
         return areasData.deliveryAreas;
       }
@@ -289,13 +305,46 @@
       return areasData;
     }
 
-    // --- 2. Format Price Helper ---
+    // --- 2. Format Price Helpers ---
     function formatPrice(p) {
       if (!p && p !== 0) return '0 ل.ل';
       return (Number(p) * 1000).toLocaleString('en-US') + ' ل.ل';
     }
 
-    // --- 3. View Router ---
+    function formatUsdPrice(p) {
+      if (!p && p !== 0) return '';
+      if (!exchangeRate || exchangeRate <= 0) return '';
+      const lira = Number(p) * 1000;
+      const usd = lira / exchangeRate;
+      const formatted = (usd % 1 === 0) ? usd.toFixed(0) : usd.toFixed(2);
+      return '$' + formatted;
+    }
+
+    // --- 3. Instant Local Cache Init ---
+    function initLocalCache() {
+      const savedVer = localStorage.getItem('yalla_cache_ver');
+      if (savedVer !== CACHE_VERSION) {
+        localStorage.removeItem('yalla_areas_cache');
+        localStorage.removeItem('yalla_rate_cache');
+        localStorage.setItem('yalla_cache_ver', CACHE_VERSION);
+      } else {
+        const cachedRate = localStorage.getItem('yalla_rate_cache');
+        if (cachedRate) exchangeRate = Number(cachedRate);
+
+        const cachedAreas = localStorage.getItem('yalla_areas_cache');
+        if (cachedAreas) {
+          try {
+            areasData = JSON.parse(cachedAreas);
+            renderCategoryNav();
+            renderMainView();
+            document.getElementById('loading-main').classList.add('hidden');
+          } catch(e) {}
+        }
+      }
+    }
+    initLocalCache();
+
+    // --- 4. View Router ---
     function handleRoute() {
       const hash = window.location.hash;
       document.getElementById('view-main').classList.add('hidden');
@@ -314,7 +363,7 @@
     }
     window.addEventListener('hashchange', handleRoute);
 
-    // --- 4. Main App Rendering ---
+    // --- 5. Main App Rendering ---
     const regionsContainer = document.getElementById('regions-container');
     const searchInput = document.getElementById('searchInput');
     const catNav = document.getElementById('catNav');
@@ -381,10 +430,13 @@
             </div>
           `).join('');
 
+          const usdDisplay = formatUsdPrice(price);
+
           html += `
             <div class="tier-row">
               <div class="tier-header">
                 <span class="price-value">${formatPrice(price)}</span>
+                ${usdDisplay ? `<span class="price-usd">${usdDisplay}</span>` : ''}
               </div>
               <div class="areas-grid">${areasHtml}</div>
             </div>`;
@@ -398,10 +450,11 @@
 
     searchInput.addEventListener('input', renderMainView);
 
-    // --- 5. Firebase Data Listener ---
+    // --- 6. Firebase Data & Exchange Rate Listeners ---
     db.ref('deliveryAreas').on('value', snap => {
       if(snap.exists()){
         areasData = snap.val();
+        localStorage.setItem('yalla_areas_cache', JSON.stringify(areasData));
         renderCategoryNav();
         renderMainView();
         if(window.location.hash === '#admin' && auth.currentUser) renderAdminTable();
@@ -411,7 +464,42 @@
       }
     });
 
-    // --- 6. Admin Panel Functions ---
+    db.ref('exchangeRate').on('value', snap => {
+      if(snap.exists()){
+        exchangeRate = Number(snap.val());
+      } else {
+        exchangeRate = 89500;
+      }
+      localStorage.setItem('yalla_rate_cache', exchangeRate);
+      const rateInput = document.getElementById('exchange-rate-input');
+      if (rateInput) rateInput.value = exchangeRate;
+      renderMainView();
+    });
+
+    // --- 7. Admin Panel Functions ---
+    window.saveExchangeRate = async function() {
+      const rateInput = document.getElementById('exchange-rate-input');
+      const rateVal = Number(rateInput.value);
+      const msg = document.getElementById('rate-msg');
+      if(!rateVal || rateVal <= 0) {
+        msg.textContent = 'الرجاء إدخال سعر صرف صحيح';
+        msg.className = 'msg error';
+        msg.classList.remove('hidden');
+        return;
+      }
+      try {
+        await db.ref('exchangeRate').set(rateVal);
+        msg.textContent = 'تم تحديث سعر الصرف بنجاح';
+        msg.className = 'msg success';
+        msg.classList.remove('hidden');
+        setTimeout(() => msg.classList.add('hidden'), 3000);
+      } catch(err) {
+        msg.textContent = 'خطأ: ' + err.message;
+        msg.className = 'msg error';
+        msg.classList.remove('hidden');
+      }
+    };
+
     function renderAdminTable() {
       const tbody = document.getElementById('admin-table-body');
       tbody.innerHTML = '';
@@ -529,7 +617,7 @@
       } catch (err) { alert('فشل الحذف: غير مصرح لك أو حدث خطأ.'); }
     }
 
-    // --- 7. Authentication ---
+    // --- 8. Authentication ---
     auth.onAuthStateChanged(user => {
       handleRoute();
       if(user && window.location.hash === '#admin') renderAdminTable();
@@ -560,10 +648,10 @@
 
     document.getElementById('btn-logout').addEventListener('click', () => auth.signOut());
 
-    // --- 8. Service Worker Registration ---
+    // --- 9. Service Worker Registration ---
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed: ', err));
+        navigator.serviceWorker.register('sw.js?v1.1=' + CACHE_VERSION).catch(err => console.log('SW registration failed: ', err));
       });
     }
 
